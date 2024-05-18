@@ -265,7 +265,7 @@ class BertOutput(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        print("inside bertoutput after layernorm",sys.getsizeof(hidden_states),psutil.virtual_memory()[3]/1000000000)
+        # print("inside bertoutput after layernorm",sys.getsizeof(hidden_states),psutil.virtual_memory()[3]/1000000000)
         return hidden_states
 
 
@@ -283,7 +283,7 @@ class BertLayer(nn.Module):
             intermediate_output, imp_weights = self.intermediate(attention_output, tgt_pos=tgt_pos, tmp_score=tmp_score, imp_pos=imp_pos, imp_op=imp_op)
         else:
             intermediate_output = self.intermediate(attention_output, tgt_pos=tgt_pos, tmp_score=tmp_score, imp_pos=imp_pos, imp_op=imp_op)
-        print("inside bertlayer before returning")
+        # print("inside bertlayer before returning")
         layer_output = self.output(intermediate_output, attention_output)
         
         if imp_op == 'return':
@@ -295,7 +295,7 @@ class BertLayer(nn.Module):
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super(BertEncoder, self).__init__()
-        print(config.num_hidden_layers)
+        # print(config.num_hidden_layers)
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states, attention_mask, tgt_layer=None, tgt_pos=None, tmp_score=None, imp_pos=None, imp_op=None):
@@ -317,7 +317,7 @@ class BertEncoder(nn.Module):
                 imp_weights.extend(imp_weights_l)
             else:
                 if tgt_layer == layer_index:
-                    print("inside bert encoder before layermodule")
+                    # print("inside bert encoder before layermodule")
                     hidden_states, ffn_weights = layer_module(hidden_states, attention_mask, tgt_pos=tgt_pos, tmp_score=tmp_score, imp_pos=imp_pos_at_this_layer, imp_op=imp_op)
                 else:
                     hidden_states, _ = layer_module(hidden_states, attention_mask, tgt_pos=tgt_pos, imp_pos=imp_pos_at_this_layer, imp_op=imp_op)
@@ -509,7 +509,7 @@ class BertModel(PreTrainedBertModel):
         embedding_output = self.embeddings(input_ids, token_type_ids)
         
         if imp_op == 'return':
-            print("inside bertmodel before self.encoder")
+            # print("inside bertmodel before self.encoder")
             encoded_layers, ffn_weights, imp_weights = self.encoder(embedding_output,
                                         extended_attention_mask,
                                         tgt_layer=tgt_layer,
@@ -543,7 +543,7 @@ class BertForMaskedLM(PreTrainedBertModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, tgt_pos=None, tgt_layer=None, tmp_score=None, tgt_label=None, imp_pos=None, imp_op=None):
-        print("tmp",tmp_score,sys.getsizeof(tmp_score))
+        # print("tmp",tmp_score,sys.getsizeof(tmp_score))
         if tmp_score is not None:
             batch_size = tmp_score.shape[0]
             input_ids = input_ids.repeat(batch_size, 1)
@@ -554,26 +554,26 @@ class BertForMaskedLM(PreTrainedBertModel):
             
             last_hidden, ffn_weights, imp_weights = self.bert(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, tgt_pos=tgt_pos, tgt_layer=tgt_layer, tmp_score=tmp_score, imp_pos=imp_pos, imp_op=imp_op)  # (batch, max_len, hidden_size), (batch, max_len, ffn_size), (n_imp_pos)
         else:
-            print("before self.bert")
+            # print("before self.bert")
             last_hidden, ffn_weights = self.bert(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, tgt_pos=tgt_pos, tgt_layer=tgt_layer, tmp_score=tmp_score, imp_pos=imp_pos, imp_op=imp_op)  # (batch, max_len, hidden_size), (batch, max_len, ffn_size)
         last_hidden = last_hidden[:, tgt_pos, :]  # (batch, hidden_size)
         ffn_weights = ffn_weights[:, tgt_pos, :]  # (batch, ffn_size)
         tgt_logits = self.cls(last_hidden)  # (batch, n_vocab)
         tgt_prob = F.softmax(tgt_logits, dim=1)  # (batch, n_vocab)
-        print("imp")
+        # print("imp")
         if imp_op == 'return':
             return imp_weights
         else:
             
             if tmp_score is None:
-                print("is tmp none or not",tmp_score)
-                print("size",sys.getsizeof(ffn_weights),sys.getsizeof(tgt_logits))
-                print("ffn",ffn_weights,tgt_logits)
+                # print("is tmp none or not",tmp_score)
+                # print("size",sys.getsizeof(ffn_weights),sys.getsizeof(tgt_logits))
+                # print("ffn",ffn_weights,tgt_logits)
                 # return ffn_weights at a layer and the final logits at the [MASK] position
                 return ffn_weights, tgt_logits
             else:
-                print("before final probs")
+                # print("before final probs")
                 # return final probabilities and grad at a layer at the [MASK] position
                 gradient = torch.autograd.grad(torch.unbind(tgt_prob[:, tgt_label]), tmp_score)
-                print("final probs",gradient)
+                # print("final probs",gradient)
                 return tgt_prob, gradient[0]
